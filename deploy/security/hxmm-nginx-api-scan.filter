@@ -1,0 +1,4 @@
+[Definition]
+failregex = ^<HOST> - .* "(GET|POST|PUT|DELETE|PATCH) /(wp-admin|wp-login|phpmyadmin|\\.env|\\.git|adminer|vendor|cgi-bin|boaform|HNAP1|shell|manager|setup|config).*" (400|401|403|404|405|444) .*
+            ^<HOST> - .* "(GET|POST|PUT|DELETE|PATCH) /api/.*" (400|401|403|404|405|429) .*
+ignoreregex =

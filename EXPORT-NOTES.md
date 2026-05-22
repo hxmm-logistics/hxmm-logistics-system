@@ -1,0 +1,1 @@
+﻿Exported clean HX MM logistics system from C:\Users\ROG STRIX\Documents\Codex\2026-05-21\frontend-react-vite-backend-express-database on 20260522-143123. Excluded node_modules, dist, artifacts, logs, local env files, and browser profiles.
