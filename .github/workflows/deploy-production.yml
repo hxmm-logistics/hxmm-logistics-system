@@ -1,0 +1,52 @@
+name: Deploy HX MM Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify build output
+        run: test -f dist/index.html
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            cd /var/www/logistics-system
+            git fetch origin main
+            git reset --hard origin/main
+            npm ci
+            npm run build
+            npm run db:migrate
+            npm run db:migrate:auth
+npm run db:migrate:tracking
+            pm2 startOrReload deploy/prod/ecosystem.prod.config.cjs --env production
+            pm2 save
+            sudo nginx -t
+            sudo systemctl reload nginx
+            curl -fsS http://127.0.0.1:4000/api/health

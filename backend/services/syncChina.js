@@ -1,8 +1,8 @@
-import { query } from '../db.js';
-import { assertTransition } from '../status.js';
-import { fetchChinaTracking, normalizeChinaStatus } from './chinaLogistics.js';
+﻿import { pool, query } from '../db.js';
+import { createEvent, statusFromEventCode } from './trackingEvents.js';
+import { fetchChinaTracking, normalizeChinaEventCode } from './chinaLogistics.js';
 
-const SYNCABLE_STATUSES = ['PENDING', 'IN_CHINA_TRANSIT', 'AT_BORDER', 'CUSTOMS'];
+const SYNCABLE_STATUSES = ['WAREHOUSE_RECEIVED', 'CHINA_TRANSIT', 'AT_BORDER', 'CUSTOMS_CLEARANCE'];
 
 export async function syncOneChinaShipment(shipment) {
   if (!shipment.china_carrier_code || !shipment.china_tracking_no || !SYNCABLE_STATUSES.includes(shipment.current_status)) {
@@ -14,30 +14,39 @@ export async function syncOneChinaShipment(shipment) {
     return null;
   }
 
-  const nextStatus = normalizeChinaStatus(tracking.rawStatus);
-  assertTransition(shipment.current_status, nextStatus);
+  const eventCode = normalizeChinaEventCode(tracking.rawStatus);
+  const nextStatus = statusFromEventCode(eventCode);
   if (nextStatus === shipment.current_status && tracking.location === shipment.current_location) {
     return null;
   }
 
-  await query(
-    `
-      INSERT INTO shipment_events (shipment_id, event_type, location, remark, source, created_by)
-      VALUES ($1, $2, $3, $4, 'china_api', 1)
-    `,
-    [shipment.id, nextStatus, tracking.location, tracking.remark || tracking.rawStatus]
-  );
-
-  await query(
-    `
-      UPDATE shipments
-          SET current_status = $1,
-          current_location = $2,
-          updated_at = NOW()
-      WHERE id = $3
-    `,
-    [nextStatus, tracking.location, shipment.id]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await createEvent(
+      {
+        shipment_id: shipment.id,
+        tracking_no: shipment.tracking_no || shipment.china_tracking_no,
+        event_code: eventCode,
+        event_description: tracking.remark || tracking.rawStatus,
+        event_city: tracking.location,
+        source_type: 'system',
+        external_ref: `${shipment.china_carrier_code}:${shipment.china_tracking_no}:${tracking.rawStatus}`,
+        external_payload: {
+          carrier_code: shipment.china_carrier_code,
+          tracking_no: shipment.china_tracking_no,
+          raw_status: tracking.rawStatus,
+        },
+      },
+      client
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 
   return nextStatus;
 }
@@ -72,3 +81,4 @@ export function startChinaSyncJob() {
   run();
   return setInterval(run, intervalMs);
 }
+

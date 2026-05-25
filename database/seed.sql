@@ -1,4 +1,4 @@
-INSERT INTO logistics_companies (id, name, country, contact_phone)
+﻿INSERT INTO logistics_companies (id, name, country, contact_phone)
 VALUES
   (1, 'HX MM China Logistics', 'China', '+86 13800000000'),
   (2, 'HX MM Myanmar Logistics', 'Myanmar', '+95 900000000')
@@ -16,6 +16,10 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO shipments (
   platform_tracking_no,
+  hx_no,
+  tracking_no,
+  carrier_code,
+  carrier_name,
   china_carrier_code,
   china_carrier_name,
   china_tracking_no,
@@ -23,11 +27,15 @@ INSERT INTO shipments (
   customer_phone,
   origin_country,
   destination_country,
-  current_status,
-  current_location
+  current_location,
+  current_node
 )
 VALUES (
   'HX202605210001',
+  'HX202605210001',
+  'YT123456789CN',
+  'YTO',
+  '圆通速递',
   'YTO',
   '圆通速递',
   'YT123456789CN',
@@ -35,54 +43,67 @@ VALUES (
   '+95 912345678',
   'China',
   'Myanmar',
-  'IN_MYANMAR',
-  '木姐'
+  '中国卖家',
+  '中国卖家'
 )
 ON CONFLICT (platform_tracking_no) DO NOTHING;
 
-INSERT INTO shipment_events (shipment_id, event_type, event_time, location, remark, source, created_by)
-SELECT id, 'PENDING', NOW() - INTERVAL '3 days', '中国卖家', '包裹已创建，等待中国快递揽收', 'system', 3
+INSERT INTO tracking_events (shipment_id, event_time, event_code, event_type, resulting_status, event_description, event_city, operator_id, source_type, external_payload)
+SELECT id, NOW() - INTERVAL '3 days', 'WAREHOUSE_RECEIVE', 'WAREHOUSE_RECEIVE', 'WAREHOUSE_RECEIVED', '包裹已创建，等待中国快递揽收', '中国卖家', NULL, 'system', '{"seed":true}'::jsonb
 FROM shipments WHERE platform_tracking_no = 'HX202605210001'
   AND NOT EXISTS (
-    SELECT 1 FROM shipment_events
+    SELECT 1 FROM tracking_events
     WHERE shipment_id = shipments.id
-      AND event_type = 'PENDING'
-      AND location = '中国卖家'
-      AND source = 'system'
+      AND event_code = 'WAREHOUSE_RECEIVE'
+      AND event_city = '中国卖家'
+      AND source_type = 'system'
   );
 
-INSERT INTO shipment_events (shipment_id, event_type, event_time, location, remark, source, created_by)
-SELECT id, 'IN_CHINA_TRANSIT', NOW() - INTERVAL '2 days', '云南昆明', '中国物流运输中', 'china_api', 1
+INSERT INTO tracking_events (shipment_id, event_time, event_code, event_type, resulting_status, event_description, event_city, operator_id, source_type, external_payload)
+SELECT id, NOW() - INTERVAL '2 days', 'CHINA_DEPART', 'CHINA_DEPART', 'CHINA_TRANSIT', '中国物流运输中', '云南昆明', NULL, 'system', '{"seed":true,"legacy_source":"china_api"}'::jsonb
 FROM shipments WHERE platform_tracking_no = 'HX202605210001'
   AND NOT EXISTS (
-    SELECT 1 FROM shipment_events
+    SELECT 1 FROM tracking_events
     WHERE shipment_id = shipments.id
-      AND event_type = 'IN_CHINA_TRANSIT'
-      AND location = '云南昆明'
-      AND source = 'china_api'
+      AND event_code = 'CHINA_DEPART'
+      AND event_city = '云南昆明'
+      AND source_type = 'system'
   );
 
-INSERT INTO shipment_events (shipment_id, event_type, event_time, location, remark, source, created_by)
-SELECT id, 'AT_BORDER', NOW() - INTERVAL '1 day', '瑞丽 / 木姐口岸', '包裹到达边境，等待交接', 'china_api', 1
+INSERT INTO tracking_events (shipment_id, event_time, event_code, event_type, resulting_status, event_description, event_city, operator_id, source_type, external_payload)
+SELECT id, NOW() - INTERVAL '1 day', 'BORDER_ARRIVE', 'BORDER_ARRIVE', 'AT_BORDER', '包裹到达边境，等待交接', '瑞丽 / 木姐口岸', NULL, 'system', '{"seed":true,"legacy_source":"china_api"}'::jsonb
 FROM shipments WHERE platform_tracking_no = 'HX202605210001'
   AND NOT EXISTS (
-    SELECT 1 FROM shipment_events
+    SELECT 1 FROM tracking_events
     WHERE shipment_id = shipments.id
-      AND event_type = 'AT_BORDER'
-      AND location = '瑞丽 / 木姐口岸'
-      AND source = 'china_api'
+      AND event_code = 'BORDER_ARRIVE'
+      AND event_city = '瑞丽 / 木姐口岸'
+      AND source_type = 'system'
   );
 
-INSERT INTO shipment_events (shipment_id, event_type, event_time, location, remark, source, created_by)
-SELECT id, 'IN_MYANMAR', NOW() - INTERVAL '6 hours', '木姐', '缅甸物流扫码接货', 'myanmar_scan', 2
+INSERT INTO tracking_events (shipment_id, event_time, event_code, event_type, resulting_status, event_description, event_city, operator_id, source_type, external_payload)
+SELECT id, NOW() - INTERVAL '6 hours', 'MYANMAR_ARRIVE', 'MYANMAR_ARRIVE', 'MYANMAR_TRANSIT', '缅甸物流扫码接货', '木姐', NULL, 'scan', '{"seed":true,"legacy_source":"myanmar_scan"}'::jsonb
 FROM shipments WHERE platform_tracking_no = 'HX202605210001'
   AND NOT EXISTS (
-    SELECT 1 FROM shipment_events
+    SELECT 1 FROM tracking_events
     WHERE shipment_id = shipments.id
-      AND event_type = 'IN_MYANMAR'
-      AND location = '木姐'
-      AND source = 'myanmar_scan'
+      AND event_code = 'MYANMAR_ARRIVE'
+      AND event_city = '木姐'
+      AND source_type = 'scan'
   );
+
+DO $$
+DECLARE
+  seed_shipment_id integer;
+BEGIN
+  SELECT id INTO seed_shipment_id
+  FROM shipments
+  WHERE platform_tracking_no = 'HX202605210001';
+
+  IF seed_shipment_id IS NOT NULL AND to_regprocedure('aggregate_shipment_status(integer)') IS NOT NULL THEN
+    PERFORM aggregate_shipment_status(seed_shipment_id);
+  END IF;
+END $$;
 
 SELECT setval(
   'platform_tracking_no_seq',
@@ -96,3 +117,5 @@ SELECT setval(
   ),
   true
 );
+
+

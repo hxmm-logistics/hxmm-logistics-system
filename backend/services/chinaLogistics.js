@@ -1,25 +1,27 @@
-const borderKeywords = ['清水河', '瑞丽', '木姐', '边境', '口岸'];
+﻿const borderKeywords = ['清水河', '瑞丽', '木姐', '边境', '口岸'];
 const customsKeywords = ['清关', '海关', '报关'];
 const exceptionKeywords = ['异常', '退回', '拒收', '丢失', '延误'];
 
-export function normalizeChinaStatus(rawText = '') {
+export function normalizeChinaEventCode(rawText = '') {
   if (exceptionKeywords.some((word) => rawText.includes(word))) {
-    return 'EXCEPTION';
+    return 'EXCEPTION_REPORT';
   }
   if (customsKeywords.some((word) => rawText.includes(word))) {
-    return 'CUSTOMS';
+    return 'CUSTOMS_CLEAR';
   }
   if (borderKeywords.some((word) => rawText.includes(word))) {
-    return 'AT_BORDER';
+    return 'BORDER_ARRIVE';
   }
   if (rawText.includes('签收')) {
-    return 'DELIVERED';
+    return 'DELIVER';
   }
   if (rawText.includes('揽收') || rawText.includes('运输') || rawText.includes('派送') || rawText.includes('到达')) {
-    return 'IN_CHINA_TRANSIT';
+    return 'CHINA_DEPART';
   }
-  return 'PENDING';
+  return 'WAREHOUSE_RECEIVE';
 }
+
+export const normalizeChinaStatus = normalizeChinaEventCode;
 
 export async function fetchChinaTracking(chinaCarrierCode, chinaTrackingNo) {
   const provider = process.env.CHINA_LOGISTICS_PROVIDER || 'mock';

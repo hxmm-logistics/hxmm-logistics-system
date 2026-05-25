@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hxmm-postgres
+    restart: unless-stopped
+    env_file:
+      - ../../.env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hx_mm_logistics}
+      POSTGRES_USER: ${POSTGRES_USER:-hxmm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - hxmm_postgres_data:/var/lib/postgresql/data
+      - ../prod/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hxmm} -d ${POSTGRES_DB:-hx_mm_logistics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hxmm_internal
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: hxmm-api
+    restart: unless-stopped
+    env_file:
+      - ../../.env.production
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://${POSTGRES_USER:-hxmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hx_mm_logistics}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hxmm_internal
+
+  nginx:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.nginx
+    container_name: hxmm-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - hxmm_internal
+
+volumes:
+  hxmm_postgres_data:
+
+networks:
+  hxmm_internal:
+    driver: bridge

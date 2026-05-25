@@ -57,6 +57,7 @@ npm run db:create
 npm run db:schema
 npm run db:migrate
 npm run db:migrate:auth
+npm run db:migrate:tracking
 npm run db:seed
 npm run db:seed:users
 ```

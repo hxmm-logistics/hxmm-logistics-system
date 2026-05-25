@@ -1,9 +1,14 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { authRouter } from './routes/auth.js';
 import { operatorsRouter } from './routes/operators.js';
 import { shipmentsRouter } from './routes/shipments.js';
+import { publicRouter } from './routes/public.js';
+import { batchRouter } from './routes/batch.js';
+import { batchesRouter } from './routes/batches.js';
+import { exceptionsRouter } from './routes/exceptions.js';
+import { dashboardRouter } from './routes/dashboard.js';
 import { apiRateLimit, loginRateLimit, securityHeaders } from './security.js';
 import { startChinaSyncJob } from './services/syncChina.js';
 
@@ -33,12 +38,22 @@ app.get('/health', healthCheck);
 app.get('/api/health', healthCheck);
 app.use(['/auth/login', '/api/auth/login'], loginRateLimit);
 app.use(apiRateLimit);
+app.use(publicRouter);
 app.use(authRouter);
 app.use(shipmentsRouter);
 app.use(operatorsRouter);
+app.use(batchRouter);
+app.use(batchesRouter);
+app.use(exceptionsRouter);
+app.use(dashboardRouter);
 app.use('/api', authRouter);
 app.use('/api', shipmentsRouter);
+app.use('/api', publicRouter);
 app.use('/api', operatorsRouter);
+app.use('/api', batchRouter);
+app.use('/api', batchesRouter);
+app.use('/api', exceptionsRouter);
+app.use('/api', dashboardRouter);
 
 app.use((error, req, res, next) => {
   const status = error.status || 500;
@@ -54,3 +69,8 @@ app.listen(port, () => {
   console.log(`[HX MM API running] http://localhost:${port}`);
   startChinaSyncJob();
 });
+
+
+
+
+

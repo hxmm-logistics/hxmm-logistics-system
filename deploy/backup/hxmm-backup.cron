@@ -1,0 +1,2 @@
+# Daily HX MM PostgreSQL backup at 02:30 server time
+30 2 * * * /usr/bin/env bash /var/www/logistics-system/deploy/backup/postgres-backup-prod.sh >> /var/log/hxmm-backup.log 2>&1
